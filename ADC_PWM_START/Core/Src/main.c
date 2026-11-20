@@ -18,6 +18,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "stm32f1xx_hal_adc.h"
+#include "stm32f1xx_hal_def.h"
+#include <stdint.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -45,7 +48,9 @@ ADC_HandleTypeDef hadc1;
 TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
-
+volatile uint32_t adc_value = 0;      //adc读取的原始数值喵
+volatile uint32_t pwm_pulse = 1500;   //pwm高电平持续时间
+volatile uint32_t servo_angle = 90;   //舵机默认置中喵
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -94,7 +99,24 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
+  if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK )   //初始化ADC
+  {
+    Error_Handler();
+  }
+  
+  //设置定时器的触发数值，置中舵机
+  __HAL_TIM_SET_COMPARE(   
+    &htim2,
+    TIM_CHANNEL_2,
+    1500
+  );
 
+  //正式启动PWM喵
+  if (HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -102,7 +124,26 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+    if (HAL_ADC_Start(&hadc1) == HAL_OK)   //启动adc喵
+    {
+      if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
+      {
+        adc_value = HAL_ADC_GetValue(&hadc1);
 
+        pwm_pulse = 1000 + (adc_value * 1000) / 4095; //需要把adc的数值映射到2000ms内
+
+        servo_angle = (adc_value * 180) / 4095;
+
+        __HAL_TIM_SET_COMPARE(    //更新pwm占空比
+          &htim2,
+          TIM_CHANNEL_2,
+          pwm_pulse
+        );
+      }
+      HAL_ADC_Stop(&hadc1);
+    }
+    HAL_Delay(20);
+    
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
