@@ -130,7 +130,7 @@ int main(void)
       {
         adc_value = HAL_ADC_GetValue(&hadc1);
 
-        pwm_pulse = 1000 + (adc_value * 1000) / 4095; //需要把adc的数值映射到2000ms内
+        pwm_pulse = 1000 + (adc_value * 1000) / 4095; // Map ADC to a 1000-2000 us pulse.
 
         servo_angle = (adc_value * 180) / 4095;
 
@@ -258,7 +258,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 71;
+  htim2.Init.Prescaler = 7;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 19999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
