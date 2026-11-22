@@ -130,7 +130,7 @@ int main(void)
       {
         adc_value = HAL_ADC_GetValue(&hadc1);
 
-        pwm_pulse = 1000 + (adc_value * 1000) / 4095; // Map ADC to a 1000-2000 us pulse.
+        pwm_pulse = 500 + (adc_value * 2000) / 4095; // 500到2500毫秒
 
         servo_angle = (adc_value * 180) / 4095;
 
