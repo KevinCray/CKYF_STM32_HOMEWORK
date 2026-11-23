@@ -18,6 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "stm32f1xx_hal.h"
+#include "stm32f1xx_hal_gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -48,6 +50,17 @@ TIM_HandleTypeDef htim2;
 volatile uint32_t adc_value = 0;      //adc读取的原始数值喵
 volatile uint32_t pwm_pulse = 1500;   //pwm高电平持续时间
 volatile uint32_t servo_angle = 90;   //舵机默认置中喵
+
+volatile uint32_t key_edge_pending = 0;  //是否有按键时间需要处理
+volatile uint32_t key_edge_tick = 0;     //上一次电平变化的ticks喵
+
+uint32_t press_tick;                //按下的时间
+uint8_t  press_status;              //按键按下状态
+uint8_t  long_pressed;              //是否长按
+
+uint8_t led_fast;     //是否启用快闪
+uint8_t led_status;   //LED是否启动
+uint32_t blink_tick = 0;  //LED闪烁计数
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -134,7 +147,10 @@ int main(void)
       }
       HAL_ADC_Stop(&hadc1);
     }
-    HAL_Delay(20);
+
+    //按键扫描和led刷新
+    led_process();
+    key_scanning();
   }
   /* USER CODE END 3 */
 }
@@ -288,13 +304,36 @@ static void MX_TIM2_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin : LED1_Pin */
+  GPIO_InitStruct.Pin = LED1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(LED1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : BUTTON_Pin */
+  GPIO_InitStruct.Pin = BUTTON_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(BUTTON_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -302,6 +341,84 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == GPIO_PIN_12)
+  {
+    key_edge_tick = HAL_GetTick();  //记录边沿触发时间
+    key_edge_pending = 1;           //传到主循环任务函数处理
+  }
+}
+
+/** 
+ * @brief 按键扫描函数喵
+*/
+
+void key_scanning(void)
+{
+  uint32_t present_time = HAL_GetTick();
+
+  if (key_edge_pending)
+  {
+    if ((present_time - key_edge_tick)>=20)
+    {
+      key_edge_pending = 0;
+      GPIO_PinState PIN_STATE = HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin);
+      uint8_t new_pressed = (PIN_STATE == GPIO_PIN_RESET);
+
+      if (new_pressed != press_status)
+      {
+        press_status = new_pressed;
+
+        if (press_status)
+        {
+          press_tick = present_time;
+          long_pressed = 0;
+        }
+        else
+        {
+          if (!long_pressed)
+          {
+            led_fast = 0;
+            led_status = ! led_status;
+          }
+          
+        }
+        
+      }
+      
+    }
+    
+  }
+  
+  if (press_status && !long_pressed && HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin) == GPIO_PIN_RESET && (HAL_GetTick() - present_time) >= 1000)
+  {
+    long_pressed = 1;
+    led_fast = ! led_fast;
+
+    blink_tick = present_time;
+  }
+  
+}
+
+/**
+ * @brief led状态切换函数喵喵喵
+ */
+void led_process(void)
+{
+  uint32_t present_time = HAL_GetTick();
+  
+  if (led_fast)
+  {
+    if ((present_time - blink_tick) >= 200)
+    {
+      blink_tick = present_time;
+      led_status = ! led_status;
+    }
+  }
+
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, led_status ? GPIO_PIN_RESET : GPIO_PIN_SET);
+}
 
 /* USER CODE END 4 */
 
