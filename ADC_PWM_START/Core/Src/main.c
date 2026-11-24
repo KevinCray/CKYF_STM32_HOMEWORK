@@ -18,8 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "stm32f1xx_hal.h"
-#include "stm32f1xx_hal_gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -45,6 +43,7 @@
 ADC_HandleTypeDef hadc1;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
 volatile uint32_t adc_value = 0;      //adc读取的原始数值喵
@@ -61,6 +60,10 @@ uint8_t  long_pressed;              //是否长按
 uint8_t led_fast;     //是否启用快闪
 uint8_t led_status;   //LED是否启动
 uint32_t blink_tick = 0;  //LED闪烁计数
+
+uint16_t breath_tick = 0; //呼吸灯计数ticks喵
+uint8_t breath_dir = 1;  //呼吸灯计数方向喵
+uint8_t breath_duty = 0;  //占空比计数值
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,8 +71,11 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
-
+void led_process(void);
+void key_scanning(void);
+void breath_led(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -108,6 +114,7 @@ int main(void)
   MX_GPIO_Init();
   MX_ADC1_Init();
   MX_TIM2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK )   //初始化ADC喵
   {
@@ -123,6 +130,11 @@ int main(void)
 
   //正式启动PWM喵
   if (HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  
+  if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -151,6 +163,7 @@ int main(void)
     //按键扫描和led刷新
     led_process();
     key_scanning();
+    breath_led();
   }
   /* USER CODE END 3 */
 }
@@ -298,6 +311,55 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 71;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 999;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -391,7 +453,7 @@ void key_scanning(void)
     
   }
   
-  if (press_status && !long_pressed && HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin) == GPIO_PIN_RESET && (HAL_GetTick() - present_time) >= 1000)
+  if (press_status && !long_pressed && HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin) == GPIO_PIN_RESET && (present_time - press_tick) >= 1000)
   {
     long_pressed = 1;
     led_fast = ! led_fast;
@@ -420,6 +482,32 @@ void led_process(void)
   HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, led_status ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
 
+void breath_led(void)
+{
+  uint32_t present_time = HAL_GetTick();
+
+  if ((present_time - breath_tick) >= 10) //每10ms更新亮度
+  {
+    breath_tick = present_time;   //更新时间
+
+    int32_t next_duty = (int32_t)breath_duty + breath_dir * 10;
+
+    if (breath_duty >= 1000)
+    {
+      next_duty = 1000;
+      breath_dir = -1;
+    }
+    else if (next_duty <= 1000)
+    {
+      next_duty = 0;
+      breath_dir = 1;
+    }
+    
+    breath_duty = (uint16_t) next_duty; //更新占空比数值
+
+    __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_1,breath_duty);
+  } 
+}
 /* USER CODE END 4 */
 
 /**
