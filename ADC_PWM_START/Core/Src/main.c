@@ -61,9 +61,9 @@ uint8_t led_fast;     //是否启用快闪
 uint8_t led_status;   //LED是否启动
 uint32_t blink_tick = 0;  //LED闪烁计数
 
-uint16_t breath_tick = 0; //呼吸灯计数ticks喵
-uint8_t breath_dir = 1;  //呼吸灯计数方向喵
-uint8_t breath_duty = 0;  //占空比计数值
+uint32_t breath_tick = 0; //呼吸灯计数ticks喵
+int8_t breath_dir = 1;  //呼吸灯计数方向喵
+uint16_t breath_duty = 0;  //占空比计数值
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -470,7 +470,7 @@ void led_process(void)
 {
   uint32_t present_time = HAL_GetTick();
   
-  if (led_fast)
+  if (led_fast)     //led处于快闪模式的时候才更新led_status
   {
     if ((present_time - blink_tick) >= 200)
     {
@@ -484,20 +484,20 @@ void led_process(void)
 
 void breath_led(void)
 {
-  uint32_t present_time = HAL_GetTick();
+  uint32_t present_time = HAL_GetTick();  //每一次调用breath_led都要更新一次时间喵
 
   if ((present_time - breath_tick) >= 10) //每10ms更新亮度
   {
-    breath_tick = present_time;   //更新时间
+    breath_tick = present_time;   //重置breathtick
 
     int32_t next_duty = (int32_t)breath_duty + breath_dir * 10;
 
-    if (breath_duty >= 1000)
+    if (next_duty >= 1000)
     {
       next_duty = 1000;
       breath_dir = -1;
     }
-    else if (next_duty <= 1000)
+    else if (next_duty <= 0)
     {
       next_duty = 0;
       breath_dir = 1;
